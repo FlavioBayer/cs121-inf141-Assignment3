@@ -1,12 +1,10 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package ir.assignments.three;
 
 import edu.uci.ics.crawler4j.parser.HtmlParseData;
 import edu.uci.ics.crawler4j.url.WebURL;
+import static ir.assignments.two.a.Utilities.tokenizeString;
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -16,17 +14,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- *
- * @author flavi
+ * UCI CS 121 - Assignment 2: Crawling
+ * @author Flavio Bayer X0947373, Kevin Ho 30441608, Lance Lee 75935072, Munish Juneja 82377245
+ * @version 1.0
+ * @date 2016.01.29
  */
 public class Question5 {
-    //What are the 500 most common words in this domain?
-    //(Ignore English stop words, which can be found, for example, at http://www.ranks.nl/stopwords.)
-    //Submit the list of common words ordered by frequency (and alphabetically for words with the same frequency) in a file called CommonWords.txt.
     /**
+     * What are the 500 most common words in this domain?
+     * (Ignore English stop words, which can be found, for example, at http://www.ranks.nl/stopwords.)
+     * Submit the list of common words ordered by frequency (and alphabetically for words with the same frequency) in a file called CommonWords.txt.
      * @param args the command line arguments
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws FileNotFoundException {
         HashSet<String> stopwords = new HashSet<>();
         stopwords.add("a");
         stopwords.add("about");
@@ -202,26 +202,32 @@ public class Question5 {
         stopwords.add("yourself");
         stopwords.add("yourselves");
         
-        System.out.println("Loading Pages...");
-        System.out.println("Pages loaded! Processing(1)...");
         Map<String,Integer> tokenCount = new HashMap<>();
+        int itp=0;
+        //iterate over pages and count tokens
         for(Iterator<Map.Entry<WebURL,HtmlParseData>> it=MyCrawler.iteratePagesData(MyCrawler.FILE_PAGES_NAME); it.hasNext(); ){
             Map.Entry<WebURL,HtmlParseData> up = it.next();
-            if(up.getValue().getText().length()>1000000)continue;//ignore files bigger than 1MB
-            List<String> tokens = ir.assignments.two.a.Utilities.tokenizeString(up.getValue().getText());
+            if(itp++%1147==0)System.out.println(itp);//print progress so far
+            if(MyCrawler.isConsideredValidHtmlPage(up.getValue())==false)continue;
+            List<String> tokens = tokenizeString(up.getValue().getText());//tokenize the file
+            //iterate over tokens and add to count
             for(String token : tokens){
-                if(stopwords.contains(token))continue;
+                //if(token.equals("http"))System.out.println(up.getKey());//print pages that contains a token
+                if(stopwords.contains(token))continue;//ignore stopwords
                 Integer currentSubdomainCount = tokenCount.get(token);
-                if(currentSubdomainCount==null){
+                if(currentSubdomainCount==null){//token not yet inserted
                     currentSubdomainCount = 0;
                 }
                 currentSubdomainCount++;
                 tokenCount.put(token, currentSubdomainCount);
             }
         }
-        System.out.println("(2)...");
+        
+        //sort by frequency and string
+        //copy to an array list
         ArrayList< Map.Entry<String,Integer> > sortedTokens = new ArrayList<>(tokenCount.entrySet());
-        tokenCount.clear();
+        tokenCount.clear();//free memory
+        //sort
         sortedTokens.sort(new Comparator<Map.Entry<String, Integer>>() {
             @Override
             public int compare(Map.Entry<String, Integer> e0, Map.Entry<String, Integer> e1) {
@@ -232,9 +238,14 @@ public class Question5 {
                 }
             }
         });
+        //print results
+        System.out.printf("Question 5: %d unique words were found.\n", sortedTokens.size());
+        PrintStream ps = new PrintStream(MyController.WORK_DIRECTORY + "CommonWords.txt");
         for(int i=0; i<500 && i<sortedTokens.size(); i++){
             System.out.println(sortedTokens.get(i).getKey() + ", " + sortedTokens.get(i).getValue());
+            ps.println(sortedTokens.get(i).getKey() + ", " + sortedTokens.get(i).getValue());
         }
+        ps.close();
     } 
     
 }

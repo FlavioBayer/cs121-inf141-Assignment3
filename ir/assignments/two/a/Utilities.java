@@ -100,13 +100,8 @@ public class Utilities {
 	}
         
 	/**
-	 * Reads the input string and splits it into alphanumeric tokens.
-	 * Returns an ArrayList of these tokens, ordered according to their
-	 * occurrence in the original string.
 	 * 
-	 * Non-alphanumeric characters delineate tokens, and are discarded.
-	 *
-	 * Words are also normalized to lower case. 
+         * 
 	 * 
 	 * Example:
 	 * 
@@ -126,8 +121,9 @@ public class Utilities {
 	 */
 	public static ArrayList<String> tokenizeString(String s) {
             ArrayList<String> words = new ArrayList<>();
-            StringBuilder tmpWord = new StringBuilder();
+            StringBuilder tmpWord = new StringBuilder(s.length());
             //iterate over the characters in the file
+            if(s.length()>1000000)System.out.println(s.length());
             for(int i=0; i<s.length(); i++){
                 char c = s.charAt(i);
                 if(Character.isAlphabetic(c) || Character.isDigit(c) || c=='\''){//found one word character

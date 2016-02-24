@@ -15,15 +15,21 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
+/**
+ * UCI CS 121 - Assignment 2: Crawling
+ * @author Flavio Bayer X0947373, Kevin Ho 30441608, Lance Lee 75935072, Munish Juneja 82377245
+ * @version 1.0
+ * @date 2016.01.29
+ */
 public class MyCrawler extends WebCrawler {
     public static final String FILE_PAGES_NAME = MyController.WORK_DIRECTORY + "/pages.j";
     public static final String FILE_ERRORS_NAME = MyController.WORK_DIRECTORY + "/errors.j";
@@ -31,21 +37,30 @@ public class MyCrawler extends WebCrawler {
     public static HashMap<WebURL,HtmlParseData> pages;
     public static HashMap<WebURL,Integer> errors;
     public static HashSet<WebURL> toVisit;
-    public static int totalToVisit, totalVisited, totalError;
-
+    
+    /**
+     * Initialize the crawler and its internal structures
+     */
     public MyCrawler() {
         super();
+        //init files
         if(pages==null || errors==null || toVisit==null){
             System.out.println("MyCrawler Says: Overriting default containers");
             pages = new HashMap<>();
             errors = new HashMap<>();
             toVisit = new HashSet<>();
-            totalToVisit = 0;
-            totalVisited = 0;
-            totalError = 0;
         }
     }
     
+    /**
+     * Checks whether a page should be visited.
+     * A page should be visited if the path does not ends with invalid extension
+     * and the url references to an ics.uci.edu subdomain that is not blacklisted
+     * and the url is not contained in toVisit set(in this case it will be added)
+     * @param refer Refer page
+     * @param wurl URL to the page to be visited or not
+     * @return whether the page should be visited or not
+     */
     @Override
     public boolean shouldVisit(Page refer, WebURL wurl) { 
         try{
@@ -55,12 +70,13 @@ public class MyCrawler extends WebCrawler {
                 "wav", "mp3", "m4a", "wma",//audio
                 "png", "jpg", "jpeg", "bmp", "gif", "tiff",//images
                 "tar", "zip", "7z", "rar", "dmg", "gz", "xz", "bz", "lz", "jar",//containers
-                "js", "css", "swf", "exe", "ps", "bg", "db"//other 
+                "js", "css", "swf", "exe", "ps", "bg", "bw", "bigwig", "db"//other 
             };
             //check if it's invalid
             if(wurl.getDomain().toLowerCase().equals("uci.edu") && (wurl.getSubDomain().toLowerCase().equals("ics") || wurl.getSubDomain().toLowerCase().endsWith(".ics"))){
                 //filter traps
-                if(wurl.getSubDomain().toLowerCase().endsWith("calendar.ics"))return false;
+                if(wurl.getSubDomain().toLowerCase().equals("calendar.ics"))return false;
+                if(wurl.getSubDomain().toLowerCase().equals("duttgroup.ics"))return false;
                 if(wurl.getURL().toLowerCase().startsWith("http://archive.ics.uci.edu/ml/datasets.html?"))return false;
                 //filter unwanted file extensions
                 for(String ending : inavalidEndings){
@@ -69,13 +85,14 @@ public class MyCrawler extends WebCrawler {
                 //put in the toVisit queue
                 if(toVisit.add(wurl)==false){//ignore if it's in the toVisit queue
                     return false;
-                }else{
-                    totalToVisit++;
-                    System.out.print("\r\rA.");
-                    System.out.flush();
-                    System.out.print(appendToVisitData(FILE_TOVISIT_NAME, wurl)?"\r\rA+":"\r\rA-");
-                    System.out.flush();
+                }else if(errors.containsKey(wurl)){//it's not in the queue, but has already been parsed and got an error
+                    this.getMyController().getFrontier().setProcessed(wurl);
+                    return false;
+                }else if(pages.containsKey(wurl)){//it's not in the queue, but has already been parsed and got a valid page
+                    this.getMyController().getFrontier().scheduleAll(new ArrayList<>(pages.get(wurl).getOutgoingUrls()));
+                    return false;
                 }
+                appendToVisitData(FILE_TOVISIT_NAME, wurl);
                 return true;
             }else{
                 //System.out.println("Page not visited: '" + wurl.getURL() + "'");
@@ -86,8 +103,15 @@ public class MyCrawler extends WebCrawler {
         }
         return false;
     }
+    /**
+     * Return a string representing the progress of the crawler in the format
+     * Visited/Total - Progress%%
+     * @return a string representing the progress of the crawler
+     */
     private String getProgressText(){
-        return String.format("%06d/%06d - %05.2f%% - ", this.totalVisited+this.totalError, this.totalToVisit, 100.*(this.totalVisited+this.totalError)/this.totalToVisit);
+        int visited = pages.size()+errors.size();
+        int queue = toVisit.size();
+        return String.format("%06d/%06d - %05.2f%% - ", visited, queue, 100.*visited/queue);
     }
 
     @Override
@@ -96,13 +120,9 @@ public class MyCrawler extends WebCrawler {
             WebURL url = page.getWebURL();
             if (page.getParseData() instanceof HtmlParseData) {
                 HtmlParseData htmlParsedPage = (HtmlParseData)page.getParseData();
-                totalVisited++;
-                //pages.put(url, htmlParsedPage);
+                pages.put(url, null);//htmlParsedPage
                 System.out.println(getProgressText() + "OK: '" + url.getURL() + "' fetched! Storing html '" + urlToLocalFileName(url) + "'");
-                System.out.print("\r\rC.");
-                System.out.flush();
-                System.out.print(appendPagesData(FILE_PAGES_NAME, url, htmlParsedPage)?"\r\rC+":"\r\rC-");
-                System.out.flush();
+                appendPagesData(FILE_PAGES_NAME, url, htmlParsedPage);
                 writeTextToFile(MyController.WORK_DIRECTORY + "/html/" + urlToLocalFileName(url), htmlParsedPage.getHtml());
             }else if (page.getParseData() instanceof TextParseData) {
                 TextParseData textParsedPage = (TextParseData)page.getParseData();
@@ -110,22 +130,14 @@ public class MyCrawler extends WebCrawler {
                 //htmlParsedPage.setHtml();
                 htmlParsedPage.setText(textParsedPage.getTextContent());
                 htmlParsedPage.setOutgoingUrls(textParsedPage.getOutgoingUrls());
-                totalVisited++;
-                //pages.put(url, htmlParsedPage);
+                pages.put(url, null);//htmlParsedPage
                 System.out.println(getProgressText() + "OK: '" + url.getURL() + "' fetched! Storing html '" + urlToLocalFileName(url) + "'");
-                System.out.print("\r\rD.");
-                System.out.flush();
-                System.out.print(appendPagesData(FILE_PAGES_NAME, url, htmlParsedPage)?"\r\rD+":"\r\rD-");
-                System.out.flush();
+                appendPagesData(FILE_PAGES_NAME, url, htmlParsedPage);
                 writeTextToFile(MyController.WORK_DIRECTORY + "/html/" + urlToLocalFileName(url), textParsedPage.getTextContent());
             }else{
-                totalError++;
                 errors.put(url, -4);
                 System.out.println(getProgressText() + "NOK: InavelidClass, '" + url.getURL() + "' fetched, but it's an instance of " + page.getParseData().getClass().getName());
-                System.out.print("\r\rE.");
-                System.out.flush();
-                System.out.print(appendErrorData(FILE_ERRORS_NAME, url, -4)?"\r\rE+":"\r\rE-");
-                System.out.flush();
+                appendErrorData(FILE_ERRORS_NAME, url, -4);
             }
         }catch(Exception e){
             e.printStackTrace();
@@ -137,13 +149,9 @@ public class MyCrawler extends WebCrawler {
         try{
             WebURL webUrl = new WebURL();
             webUrl.setURL(urlStr);
-            System.out.println(getProgressText() + "NOK: onUnexpectedStatusCode '" + urlStr + "':" + statusCode + " ("+contentType+"):" + description);
-            totalError++;
             errors.put(webUrl, statusCode);
-            System.out.print("\r\rG.");
-            System.out.flush();
-            System.out.print(appendErrorData(FILE_ERRORS_NAME, webUrl, statusCode)?"\r\rG+":"\r\rG-");
-            System.out.flush();
+            System.out.println(getProgressText() + "NOK: onUnexpectedStatusCode '" + urlStr + "':" + statusCode + " ("+contentType+"):" + description);
+            appendErrorData(FILE_ERRORS_NAME, webUrl, statusCode);
             super.onUnexpectedStatusCode(urlStr, statusCode, contentType, description);
         }catch(Exception e){
             e.printStackTrace();
@@ -154,13 +162,9 @@ public class MyCrawler extends WebCrawler {
         try{
             WebURL webUrl = new WebURL();
             webUrl.setURL(urlStr);
-            System.out.println(getProgressText() + "NOK: onPageBiggerThanMaxSize: '" + webUrl.getURL() + "', " + pageSize);
-            totalError++;
             errors.put(webUrl, -1);
-            System.out.print("\r\rH.");
-            System.out.flush();
-            System.out.print(appendErrorData(FILE_ERRORS_NAME, webUrl, -1)?"\r\rH+":"\r\rH-");
-            System.out.flush();
+            System.out.println(getProgressText() + "NOK: onPageBiggerThanMaxSize: '" + webUrl.getURL() + "', " + pageSize);
+            appendErrorData(FILE_ERRORS_NAME, webUrl, -1);
             super.onPageBiggerThanMaxSize(urlStr, pageSize);
         }catch(Exception e){
             e.printStackTrace();
@@ -169,13 +173,9 @@ public class MyCrawler extends WebCrawler {
     @Override
     protected void onContentFetchError(WebURL webUrl) {
         try{
-            System.out.println(getProgressText() + "NOK: onContentFetchError: '" + webUrl.getURL() + "'");
-            totalError++;
             errors.put(webUrl, -2);
-            System.out.print("\r\rI.");
-            System.out.flush();
-            System.out.print(appendErrorData(FILE_ERRORS_NAME, webUrl, -2)?"\r\rI+":"\r\rI-");
-            System.out.flush();
+            System.out.println(getProgressText() + "NOK: onContentFetchError: '" + webUrl.getURL() + "'");
+            appendErrorData(FILE_ERRORS_NAME, webUrl, -2);
             super.onContentFetchError(webUrl);
         }catch(Exception e){
             e.printStackTrace();
@@ -184,13 +184,9 @@ public class MyCrawler extends WebCrawler {
     @Override
     protected void onParseError(WebURL webUrl) {
         try{
-            System.out.println(getProgressText() + "NOK: onParseError: '" + webUrl.getURL() + "'");
-            totalError++;
             errors.put(webUrl, -3);
-            System.out.print("\r\rJ.");
-            System.out.flush();
-            System.out.print(appendErrorData(FILE_ERRORS_NAME, webUrl, -3)?"\r\rI+":"\r\rJ-");
-            System.out.flush();
+            System.out.println(getProgressText() + "NOK: onParseError: '" + webUrl.getURL() + "'");
+            appendErrorData(FILE_ERRORS_NAME, webUrl, -3);
             super.onParseError(webUrl);
         }catch(Exception e){
             e.printStackTrace();
@@ -304,10 +300,10 @@ public class MyCrawler extends WebCrawler {
                     }catch(EOFException e){
                         return false;
                     } catch (IOException ex) {
-                        Logger.getLogger(MyCrawler.class.getName()).log(Level.SEVERE, null, ex);
+                        ex.printStackTrace();
                         return false;
                     } catch (ClassNotFoundException ex) {
-                        Logger.getLogger(MyCrawler.class.getName()).log(Level.SEVERE, null, ex);
+                        ex.printStackTrace();
                         return false;
                     }
                 }
@@ -407,6 +403,18 @@ public class MyCrawler extends WebCrawler {
             return null;
         }
         return r;
+    }
+    
+    public static boolean isConsideredValidHtmlPage(HtmlParseData page){
+        //ignore text files
+        if(page.getHtml()==null)return false;
+        //ignore non-html files that may have been considered a html file
+        if(!page.getHtml().contains("<html"))return false;
+        //ignore files greater than 1mb(no html website has more than 1mb)
+        //(checked: no file is removed because of this condition)
+        if(page.getText().length()>1000000)return false;
+        //ok
+        return true;
     }
 }
 

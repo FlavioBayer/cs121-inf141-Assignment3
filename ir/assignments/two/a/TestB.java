@@ -6,9 +6,7 @@
 package ir.assignments.two.a;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
 /**
  * UCI CS 121 - Assignment 1: Text processing functions
